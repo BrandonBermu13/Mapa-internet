@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Mapa con Pins</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        #map {
+            height: 800px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div id="map"></div>
+    </div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script>
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function (position) {
+                initPosition(position);
+            });
+        } else {
+            console.log("Geolocation is not supported by this browser.");
+        }
+
+        function initPosition(position) {
+            var map = L.map('map').setView([position.coords.latitude, position.coords.longitude], 13);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Cargar ubicaciones desde la API
+            $.ajax({
+                url: 'get_locations.php',
+                type: 'GET',
+                dataType: 'json',
+                success: function (data) {
+                    if (Array.isArray(data)) {
+                        data.forEach(function (location) {
+                            addMarker(map, location.id, location.latitude, location.longitude, location.nombre);
+                        });
+                    } else {
+                        console.error('Los datos recibidos no son una lista válida');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error('Error al cargar ubicaciones:', status, error);
+                }
+            });
+
+            function addMarker(map, id, lat, lng, nombre) {
+                var marker = L.marker([lat, lng]).addTo(map);
+                marker.bindPopup(createPopupForm(id, lat, lng, nombre));
+            }
+
+            function createPopupForm(id, lat, lng, nombre = '') {
+    lat = parseFloat(lat);
+    lng = parseFloat(lng);
+
+    if (isNaN(lat) || isNaN(lng)) {
+        console.error('Latitud o Longitud no son válidos:', lat, lng);
+        return;
+    }
+
+    var form = document.createElement('form');
+    form.innerHTML = `
+        <div class="form-group">
+            <label for="latitud">Latitud:</label>
+            <input type="text" class="form-control" id="latitud" name="latitude" value="${lat.toFixed(5)}" readonly>
+        </div>
+        <div class="form-group">
+            <label for="longitud">Longitud:</label>
+            <input type="text" class="form-control" id="longitud" name="longitude" value="${lng.toFixed(5)}" readonly>
+        </div>
+        <div class="form-group">
+            <label for="nombre">Nombre:</label>
+            <input type="text" class="form-control" id="nombre" name="nombre" value="${nombre}" required>
+        </div>
+        <input type="hidden" name="id" value="${id}">
+        <button type="submit" class="btn btn-primary">Guardar</button>
+        <button type="button" class="btn btn-danger delete-marker">Eliminar</button>
+    `;
+
+    form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var formData = new FormData(form);
+
+        $.ajax({
+            url: 'save_location.php',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (response) {
+                alert('Ubicación guardada');
+                map.closePopup();
+                window.location.reload(); // Recargar la página para mostrar los cambios
+            },
+            error: function () {
+                alert('Error al guardar');
+            }
+        });
+    });
+
+    $(form).find('.delete-marker').on('click', function () {
+        var id = form.querySelector('input[name="id"]').value;
+        $.ajax({
+            url: 'delete_location.php',
+            type: 'POST',
+            data: { id: id },
+            success: function (response) {
+                alert('Ubicación eliminada');
+                map.closePopup();
+                window.location.reload(); // Recargar la página para reflejar los cambios
+            },
+            error: function () {
+                alert('Error al eliminar');
+            }
+        });
+    });
+
+    return form;
+}
+
+
+            map.on('click', function (e) {
+    var lat = e.latlng.lat;
+    var lng = e.latlng.lng;
+
+    // Datos predeterminados
+    var data = {
+        latitude: lat,
+        longitude: lng,
+        nombre: "Ubicación sin nombre" // Nombre predeterminado
+    };
+
+    // Enviar los datos al servidor
+    $.ajax({
+        url: 'save_location.php',
+        type: 'POST',
+        data: data,
+        success: function (response) {
+            alert('Ubicación guardada');
+
+            // Crear un marcador en el mapa
+            var marker = L.marker([lat, lng]).addTo(map);
+            
+            // Generar y abrir el formulario emergente para la ubicación recién guardada
+            marker.bindPopup(createPopupForm(response.id, lat, lng, data.nombre)).openPopup();
+        },
+        error: function () {
+            alert('Error al guardar la ubicación');
+        }
+    });
+});
+
+        }
+    </script>
+</body>
+
+</html>
